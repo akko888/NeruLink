@@ -240,6 +240,7 @@ static void resolveCallback(
                         avahi_free(key); avahi_free(value);
                     }
                 }
+                if(peer.deviceId == self->info.deviceId) break;
                 if(peer.deviceId.empty()) break;
                 peer.host = addr;
                 peer.port = port;
