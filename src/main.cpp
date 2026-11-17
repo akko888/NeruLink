@@ -11,8 +11,6 @@
 #include <neru/discovery_service.h>
 
 int main() {
-    // Bloquear señales ANTES de crear hilos: todos los hilos heredan la máscara
-    // y solo el hilo principal las recibe mediante sigwait().
     sigset_t sigs;
     sigemptyset(&sigs);
     sigaddset(&sigs, SIGINT);
@@ -21,18 +19,17 @@ int main() {
 
     auto discovery = createDiscoveryService();
 
-    // Los callbacks se ejecutan en el hilo de Avahi; serializamos la salida.
     std::mutex outMutex;
 
     discovery->OnPeerFound = [&](const PeerInfo& p) {
         std::lock_guard<std::mutex> lock(outMutex);
-        std::cout << "[+] Peer encontrado: id=" << p.deviceId
+        std::cout << "[+] Device found: id=" << p.deviceId
                   << " addr=" << p.host << ":" << p.port << std::endl;
     };
 
     discovery->OnPeerLost = [&](const std::string& id) {
         std::lock_guard<std::mutex> lock(outMutex);
-        std::cout << "[-] Peer perdido: id=" << id << std::endl;
+        std::cout << "[-] Device lost: id=" << id << std::endl;
     };
 
     discovery->OnError = [&](const std::string& msg) {
@@ -42,26 +39,23 @@ int main() {
 
     std::atomic<bool> stopping{false};
 
-    // start() bloquea (bucle de Avahi), así que corre en su propio hilo.
     std::thread worker([&] {
-        discovery->start();
-        // Si start() termina solo (p. ej. fallo al crear el cliente),
-        // despertamos al hilo principal para que no se quede esperando.
+        discovery->startBrowse();
         if (!stopping) kill(getpid(), SIGTERM);
     });
 
     {
         std::lock_guard<std::mutex> lock(outMutex);
-        std::cout << "Buscando peers _miku._tcp... (Ctrl+C para salir)" << std::endl;
+        std::cout << "Searching for new devices... (Ctrl+C to leave)" << std::endl;
     }
 
     int sig = 0;
     sigwait(&sigs, &sig);
 
     stopping = true;
-    discovery->stop();
+    discovery->stopBrowse();
     worker.join();
 
-    std::cout << "Saliendo." << std::endl;
+    std::cout << "Leaving." << std::endl;
     return 0;
 }
